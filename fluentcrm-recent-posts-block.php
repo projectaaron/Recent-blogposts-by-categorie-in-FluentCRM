@@ -308,8 +308,15 @@ function fluentcrm_get_latest_post_body() {
     // Get the full post content with filters applied (shortcodes, embeds, etc.)
     $content = apply_filters('the_content', $post->post_content);
 
+    // Default inline styles for the container - can be filtered
+    $default_styles = 'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; font-size: 16px; line-height: 1.6; color: #333333;';
+    $container_styles = apply_filters('fluentcrm_latest_post_body_styles', $default_styles);
+
+    // Wrap in a styled div container so it can be styled as a block
+    $html = '<div style="' . esc_attr($container_styles) . '">' . $content . '</div>';
+
     // Allow filtering the final output
-    return apply_filters('fluentcrm_latest_post_body_html', $content, $post);
+    return apply_filters('fluentcrm_latest_post_body_html', $html, $post);
 }
 
 
