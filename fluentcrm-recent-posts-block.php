@@ -39,6 +39,7 @@ add_action('fluent_crm/after_init', function () {
         'latest_link'    => 'Latest Post Link',
         'latest_image'   => 'Latest Post Featured Image',
         'latest_full'    => 'Latest Post (Full Card)',
+        'latest_body'    => 'Latest Post Full HTML Body',
     ];
 
     // Callback function that returns the actual content
@@ -68,6 +69,9 @@ add_action('fluent_crm/after_init', function () {
 
             case 'latest_full':
                 return fluentcrm_get_latest_post_card();
+
+            case 'latest_body':
+                return fluentcrm_get_latest_post_body();
 
             default:
                 return $defaultValue;
@@ -272,6 +276,40 @@ function fluentcrm_get_latest_post_card() {
     $html .= '</table>';
 
     return apply_filters('fluentcrm_latest_post_card_html', $html, $post);
+}
+
+
+/**
+ * Get the full HTML body/content of the latest post
+ *
+ * @return string Full HTML content of the latest post
+ */
+function fluentcrm_get_latest_post_body() {
+
+    $args = [
+        'post_type'      => 'post',
+        'post_status'    => 'publish',
+        'posts_per_page' => 1,
+        'orderby'        => 'date',
+        'order'          => 'DESC',
+    ];
+
+    // Allow filtering the query args
+    $args = apply_filters('fluentcrm_latest_post_body_query_args', $args);
+
+    $posts = get_posts($args);
+
+    if (empty($posts)) {
+        return '';
+    }
+
+    $post = $posts[0];
+
+    // Get the full post content with filters applied (shortcodes, embeds, etc.)
+    $content = apply_filters('the_content', $post->post_content);
+
+    // Allow filtering the final output
+    return apply_filters('fluentcrm_latest_post_body_html', $content, $post);
 }
 
 
