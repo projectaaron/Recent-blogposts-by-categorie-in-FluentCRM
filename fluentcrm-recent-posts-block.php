@@ -198,7 +198,9 @@ function fluentcrm_get_latest_post_field($field) {
             return esc_html(wp_trim_words($excerpt, 30, '...'));
 
         case 'link':
-            return get_permalink($post->ID);
+            // Strip protocol so editor's auto-added http:// creates valid URL
+            $url = get_permalink($post->ID);
+            return preg_replace('#^https?://#', '', $url);
 
         case 'link_html':
             $url = get_permalink($post->ID);
