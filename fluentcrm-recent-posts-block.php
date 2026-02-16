@@ -31,15 +31,17 @@ add_action('fluent_crm/after_init', function () {
 
     // Available SmartCodes in this group
     $shortCodes = [
-        'list'           => 'Recent Posts List (Default 5)',
-        'list_3'         => 'Recent Posts List (3 Posts)',
-        'list_10'        => 'Recent Posts List (10 Posts)',
-        'latest_title'   => 'Latest Post Title',
-        'latest_excerpt' => 'Latest Post Excerpt',
-        'latest_link'    => 'Latest Post Link',
-        'latest_image'   => 'Latest Post Featured Image',
-        'latest_full'    => 'Latest Post (Full Card)',
-        'latest_body'    => 'Latest Post Full HTML Body',
+        'list'              => 'Recent Posts List (Default 5)',
+        'list_3'            => 'Recent Posts List (3 Posts)',
+        'list_10'           => 'Recent Posts List (10 Posts)',
+        'latest_title'      => 'Latest Post Title',
+        'latest_excerpt'    => 'Latest Post Excerpt',
+        'latest_link'       => 'Latest Post URL (raw)',
+        'latest_link_html'  => 'Latest Post Link (clickable)',
+        'latest_button'     => 'Latest Post Button (styled)',
+        'latest_image'      => 'Latest Post Featured Image',
+        'latest_full'       => 'Latest Post (Full Card)',
+        'latest_body'       => 'Latest Post Full HTML Body',
     ];
 
     // Callback function that returns the actual content
@@ -63,6 +65,12 @@ add_action('fluent_crm/after_init', function () {
 
             case 'latest_link':
                 return fluentcrm_get_latest_post_field('link');
+
+            case 'latest_link_html':
+                return fluentcrm_get_latest_post_field('link_html');
+
+            case 'latest_button':
+                return fluentcrm_get_latest_post_field('button');
 
             case 'latest_image':
                 return fluentcrm_get_latest_post_field('image');
@@ -191,6 +199,15 @@ function fluentcrm_get_latest_post_field($field) {
 
         case 'link':
             return get_permalink($post->ID);
+
+        case 'link_html':
+            $url = get_permalink($post->ID);
+            $title = esc_html($post->post_title);
+            return '<a href="' . esc_url($url) . '" style="color: #0073aa; text-decoration: underline;">' . $title . '</a>';
+
+        case 'button':
+            $url = get_permalink($post->ID);
+            return '<a href="' . esc_url($url) . '" style="display: inline-block; background-color: #0073aa; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-size: 16px; font-weight: 600;">Read Latest Post</a>';
 
         case 'image':
             $thumbnail = get_the_post_thumbnail_url($post->ID, 'medium');
