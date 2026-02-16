@@ -190,7 +190,7 @@ function fluentcrm_get_latest_post_field($field) {
             return esc_html(wp_trim_words($excerpt, 30, '...'));
 
         case 'link':
-            return esc_url(get_permalink($post->ID));
+            return get_permalink($post->ID);
 
         case 'image':
             $thumbnail = get_the_post_thumbnail_url($post->ID, 'medium');
