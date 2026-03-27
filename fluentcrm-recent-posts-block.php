@@ -116,9 +116,13 @@ function fluentcrm_get_recent_posts_html($count = 5, $category = '') {
         'order'          => 'DESC',
     ];
 
-    // Filter by category if specified
+    // Filter by category if specified (supports both ID and slug)
     if (!empty($category)) {
-        $args['category_name'] = sanitize_text_field($category);
+        if (is_numeric($category)) {
+            $args['cat'] = intval($category);
+        } else {
+            $args['category_name'] = sanitize_text_field($category);
+        }
     }
 
     // Allow filtering the query args
@@ -195,9 +199,13 @@ function fluentcrm_get_latest_post_field($field, $category = '') {
         'order'          => 'DESC',
     ];
 
-    // Filter by category if specified
+    // Filter by category if specified (supports both ID and slug)
     if (!empty($category)) {
-        $args['category_name'] = sanitize_text_field($category);
+        if (is_numeric($category)) {
+            $args['cat'] = intval($category);
+        } else {
+            $args['category_name'] = sanitize_text_field($category);
+        }
     }
 
     $posts = get_posts($args);
@@ -259,9 +267,13 @@ function fluentcrm_get_latest_post_card($category = '') {
         'order'          => 'DESC',
     ];
 
-    // Filter by category if specified
+    // Filter by category if specified (supports both ID and slug)
     if (!empty($category)) {
-        $args['category_name'] = sanitize_text_field($category);
+        if (is_numeric($category)) {
+            $args['cat'] = intval($category);
+        } else {
+            $args['category_name'] = sanitize_text_field($category);
+        }
     }
 
     $posts = get_posts($args);
@@ -339,9 +351,13 @@ function fluentcrm_get_latest_post_body($category = '') {
         'order'          => 'DESC',
     ];
 
-    // Filter by category if specified
+    // Filter by category if specified (supports both ID and slug)
     if (!empty($category)) {
-        $args['category_name'] = sanitize_text_field($category);
+        if (is_numeric($category)) {
+            $args['cat'] = intval($category);
+        } else {
+            $args['category_name'] = sanitize_text_field($category);
+        }
     }
 
     // Allow filtering the query args
@@ -393,9 +409,13 @@ add_shortcode('fluentcrm_recent_posts', function($atts) {
         'order'          => 'DESC',
     ];
 
-    // Filter by category if specified
+    // Filter by category if specified (supports both ID and slug)
     if (!empty($atts['category'])) {
-        $args['category_name'] = sanitize_text_field($atts['category']);
+        if (is_numeric($atts['category'])) {
+            $args['cat'] = intval($atts['category']);
+        } else {
+            $args['category_name'] = sanitize_text_field($atts['category']);
+        }
     }
 
     $posts = get_posts($args);
