@@ -47,39 +47,46 @@ add_action('fluent_crm/after_init', function () {
     // Callback function that returns the actual content
     $callback = function ($code, $valueKey, $defaultValue, $subscriber) {
 
+        // Check for category suffix (e.g., latest_excerpt_category_marriage_prayers)
+        $category = '';
+        if (preg_match('/^(.+)_category_(.+)$/', $valueKey, $matches)) {
+            $valueKey = $matches[1];
+            $category = $matches[2];
+        }
+
         switch ($valueKey) {
             case 'list':
-                return fluentcrm_get_recent_posts_html(5);
+                return fluentcrm_get_recent_posts_html(5, $category);
 
             case 'list_3':
-                return fluentcrm_get_recent_posts_html(3);
+                return fluentcrm_get_recent_posts_html(3, $category);
 
             case 'list_10':
-                return fluentcrm_get_recent_posts_html(10);
+                return fluentcrm_get_recent_posts_html(10, $category);
 
             case 'latest_title':
-                return fluentcrm_get_latest_post_field('title');
+                return fluentcrm_get_latest_post_field('title', $category);
 
             case 'latest_excerpt':
-                return fluentcrm_get_latest_post_field('excerpt');
+                return fluentcrm_get_latest_post_field('excerpt', $category);
 
             case 'latest_link':
-                return fluentcrm_get_latest_post_field('link');
+                return fluentcrm_get_latest_post_field('link', $category);
 
             case 'latest_link_html':
-                return fluentcrm_get_latest_post_field('link_html');
+                return fluentcrm_get_latest_post_field('link_html', $category);
 
             case 'latest_button':
-                return fluentcrm_get_latest_post_field('button');
+                return fluentcrm_get_latest_post_field('button', $category);
 
             case 'latest_image':
-                return fluentcrm_get_latest_post_field('image');
+                return fluentcrm_get_latest_post_field('image', $category);
 
             case 'latest_full':
-                return fluentcrm_get_latest_post_card();
+                return fluentcrm_get_latest_post_card($category);
 
             case 'latest_body':
-                return fluentcrm_get_latest_post_body();
+                return fluentcrm_get_latest_post_body($category);
 
             default:
                 return $defaultValue;
@@ -96,9 +103,10 @@ add_action('fluent_crm/after_init', function () {
  * Generate HTML for recent posts list
  *
  * @param int $count Number of posts to display
+ * @param string $category Category slug to filter by
  * @return string HTML output
  */
-function fluentcrm_get_recent_posts_html($count = 5) {
+function fluentcrm_get_recent_posts_html($count = 5, $category = '') {
 
     $args = [
         'post_type'      => 'post',
@@ -107,6 +115,11 @@ function fluentcrm_get_recent_posts_html($count = 5) {
         'orderby'        => 'date',
         'order'          => 'DESC',
     ];
+
+    // Filter by category if specified
+    if (!empty($category)) {
+        $args['category_name'] = sanitize_text_field($category);
+    }
 
     // Allow filtering the query args
     $args = apply_filters('fluentcrm_recent_posts_query_args', $args);
@@ -169,9 +182,10 @@ function fluentcrm_get_recent_posts_html($count = 5) {
  * Get a specific field from the latest post
  *
  * @param string $field Field to retrieve (title, excerpt, link, image)
+ * @param string $category Category slug to filter by
  * @return string Field value or empty string
  */
-function fluentcrm_get_latest_post_field($field) {
+function fluentcrm_get_latest_post_field($field, $category = '') {
 
     $args = [
         'post_type'      => 'post',
@@ -180,6 +194,11 @@ function fluentcrm_get_latest_post_field($field) {
         'orderby'        => 'date',
         'order'          => 'DESC',
     ];
+
+    // Filter by category if specified
+    if (!empty($category)) {
+        $args['category_name'] = sanitize_text_field($category);
+    }
 
     $posts = get_posts($args);
 
@@ -227,9 +246,10 @@ function fluentcrm_get_latest_post_field($field) {
 /**
  * Get a full card layout for the latest post
  *
+ * @param string $category Category slug to filter by
  * @return string HTML card for the latest post
  */
-function fluentcrm_get_latest_post_card() {
+function fluentcrm_get_latest_post_card($category = '') {
 
     $args = [
         'post_type'      => 'post',
@@ -238,6 +258,11 @@ function fluentcrm_get_latest_post_card() {
         'orderby'        => 'date',
         'order'          => 'DESC',
     ];
+
+    // Filter by category if specified
+    if (!empty($category)) {
+        $args['category_name'] = sanitize_text_field($category);
+    }
 
     $posts = get_posts($args);
 
@@ -301,9 +326,10 @@ function fluentcrm_get_latest_post_card() {
 /**
  * Get the full HTML body/content of the latest post
  *
+ * @param string $category Category slug to filter by
  * @return string Full HTML content of the latest post
  */
-function fluentcrm_get_latest_post_body() {
+function fluentcrm_get_latest_post_body($category = '') {
 
     $args = [
         'post_type'      => 'post',
@@ -312,6 +338,11 @@ function fluentcrm_get_latest_post_body() {
         'orderby'        => 'date',
         'order'          => 'DESC',
     ];
+
+    // Filter by category if specified
+    if (!empty($category)) {
+        $args['category_name'] = sanitize_text_field($category);
+    }
 
     // Allow filtering the query args
     $args = apply_filters('fluentcrm_latest_post_body_query_args', $args);
