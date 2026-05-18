@@ -496,12 +496,64 @@ add_shortcode('fluentcrm_recent_posts', function($atts) {
 
 
 /**
+ * Customizable Button Shortcode
+ * Usage: [fluentcrm_button text="Listen Now" bg_color="#0073aa" text_color="#ffffff" category="107"]
+ */
+add_shortcode('fluentcrm_button', function($atts) {
+    $atts = shortcode_atts([
+        'text'        => 'Read Latest Post',
+        'bg_color'    => '#0073aa',
+        'text_color'  => '#ffffff',
+        'padding'     => '12px 24px',
+        'font_size'   => '16px',
+        'font_weight' => '600',
+        'radius'      => '4px',
+        'category'    => '',
+        'post_type'   => 'post',
+    ], $atts);
+
+    $args = [
+        'post_type'      => sanitize_text_field($atts['post_type']),
+        'post_status'    => 'publish',
+        'posts_per_page' => 1,
+        'orderby'        => 'date',
+        'order'          => 'DESC',
+    ];
+
+    if (!empty($atts['category'])) {
+        if (is_numeric($atts['category'])) {
+            $args['cat'] = intval($atts['category']);
+        } else {
+            $args['category_name'] = sanitize_text_field($atts['category']);
+        }
+    }
+
+    $posts = get_posts($args);
+    if (empty($posts)) return '';
+
+    $url = get_permalink($posts[0]->ID);
+
+    $style = sprintf(
+        'display: inline-block; background-color: %s; color: %s; text-decoration: none; padding: %s; border-radius: %s; font-size: %s; font-weight: %s;',
+        esc_attr($atts['bg_color']),
+        esc_attr($atts['text_color']),
+        esc_attr($atts['padding']),
+        esc_attr($atts['radius']),
+        esc_attr($atts['font_size']),
+        esc_attr($atts['font_weight'])
+    );
+
+    return '<a href="' . esc_url($url) . '" style="' . $style . '">' . esc_html($atts['text']) . '</a>';
+});
+
+
+/**
  * Process shortcodes in FluentCRM email content
  * This ensures the shortcode works when used in the Visual Builder HTML block
  */
 add_filter('fluent_crm/email-body-text', function($content, $subscriber) {
-    // Process our shortcode in the email content
-    if (has_shortcode($content, 'fluentcrm_recent_posts')) {
+    // Process our shortcodes in the email content
+    if (has_shortcode($content, 'fluentcrm_recent_posts') || has_shortcode($content, 'fluentcrm_button')) {
         $content = do_shortcode($content);
     }
     return $content;
@@ -509,7 +561,7 @@ add_filter('fluent_crm/email-body-text', function($content, $subscriber) {
 
 // Also handle the raw email content filter
 add_filter('fluent_crm/parse_campaign_email_text', function($content, $subscriber) {
-    if (has_shortcode($content, 'fluentcrm_recent_posts')) {
+    if (has_shortcode($content, 'fluentcrm_recent_posts') || has_shortcode($content, 'fluentcrm_button')) {
         $content = do_shortcode($content);
     }
     return $content;
