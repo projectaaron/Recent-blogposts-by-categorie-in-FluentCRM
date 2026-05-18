@@ -225,9 +225,8 @@ function fluentcrm_get_latest_post_field($field, $category = '') {
             return esc_html(wp_trim_words($excerpt, 30, '...'));
 
         case 'link':
-            // Strip protocol so editor's auto-added http:// creates valid URL
-            $url = get_permalink($post->ID);
-            return preg_replace('#^https?://#', '', $url);
+            // Return full URL - FluentCRM 3.0 no longer auto-adds http://
+            return get_permalink($post->ID);
 
         case 'link_html':
             $url = get_permalink($post->ID);
