@@ -36,7 +36,8 @@ add_action('fluent_crm/after_init', function () {
         'list_10'           => 'Recent Posts List (10 Posts)',
         'latest_title'      => 'Latest Post Title',
         'latest_excerpt'    => 'Latest Post Excerpt',
-        'latest_link'       => 'Latest Post URL (raw)',
+        'latest_link'       => 'Latest Post URL (for buttons)',
+        'latest_link_img'   => 'Latest Post URL (for images)',
         'latest_link_html'  => 'Latest Post Link (clickable)',
         'latest_button'     => 'Latest Post Button (styled)',
         'latest_image'      => 'Latest Post Featured Image',
@@ -72,6 +73,9 @@ add_action('fluent_crm/after_init', function () {
 
             case 'latest_link':
                 return fluentcrm_get_latest_post_field('link', $category);
+
+            case 'latest_link_img':
+                return fluentcrm_get_latest_post_field('link_img', $category);
 
             case 'latest_link_html':
                 return fluentcrm_get_latest_post_field('link_html', $category);
@@ -225,8 +229,13 @@ function fluentcrm_get_latest_post_field($field, $category = '') {
             return esc_html(wp_trim_words($excerpt, 30, '...'));
 
         case 'link':
-            // Return full URL - FluentCRM 3.0 no longer auto-adds http://
+            // Return full URL - FluentCRM 3.0 buttons don't auto-add http://
             return get_permalink($post->ID);
+
+        case 'link_img':
+            // Strip protocol - FluentCRM 3.0 image links still auto-add http://
+            $url = get_permalink($post->ID);
+            return preg_replace('#^https?://#', '', $url);
 
         case 'link_html':
             $url = get_permalink($post->ID);
