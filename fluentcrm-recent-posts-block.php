@@ -49,12 +49,42 @@ add_action('fluent_crm/after_init', function () {
     // Callback function that returns the actual content
     $callback = function ($code, $valueKey, $defaultValue, $subscriber) {
 
-        // Check for category suffix (e.g., latest_excerpt_category_marriage_prayers)
+        // Parse options from SmartCode key
+        // Format: latest_button_text_Listen Now_bg_8B4513_color_ffffff_category_107
         $category = '';
-        if (preg_match('/^(.+)_category_(.+)$/', $valueKey, $matches)) {
-            $valueKey = $matches[1];
-            $category = $matches[2];
+        $button_text = 'Read Latest Post';
+        $button_bg = '#0073aa';
+        $button_color = '#ffffff';
+
+        // Extract category
+        if (preg_match('/_category_([^_]+)$/', $valueKey, $matches)) {
+            $category = $matches[1];
+            $valueKey = preg_replace('/_category_[^_]+$/', '', $valueKey);
         }
+
+        // Extract button text (supports spaces replaced with -)
+        if (preg_match('/_text_([^_]+(?:-[^_]+)*)/', $valueKey, $matches)) {
+            $button_text = str_replace('-', ' ', $matches[1]);
+            $valueKey = preg_replace('/_text_[^_]+(?:-[^_]+)*/', '', $valueKey);
+        }
+
+        // Extract background color
+        if (preg_match('/_bg_([a-fA-F0-9]{3,6})/', $valueKey, $matches)) {
+            $button_bg = '#' . $matches[1];
+            $valueKey = preg_replace('/_bg_[a-fA-F0-9]{3,6}/', '', $valueKey);
+        }
+
+        // Extract text color
+        if (preg_match('/_color_([a-fA-F0-9]{3,6})/', $valueKey, $matches)) {
+            $button_color = '#' . $matches[1];
+            $valueKey = preg_replace('/_color_[a-fA-F0-9]{3,6}/', '', $valueKey);
+        }
+
+        $button_options = [
+            'text'  => $button_text,
+            'bg'    => $button_bg,
+            'color' => $button_color,
+        ];
 
         switch ($valueKey) {
             case 'list':
@@ -85,7 +115,7 @@ add_action('fluent_crm/after_init', function () {
                 return fluentcrm_get_latest_post_field('link_html', $category);
 
             case 'latest_button':
-                return fluentcrm_get_latest_post_field('button', $category);
+                return fluentcrm_get_latest_post_button($category, $button_options);
 
             case 'latest_image':
                 return fluentcrm_get_latest_post_field('image', $category);
@@ -263,6 +293,52 @@ function fluentcrm_get_latest_post_field($field, $category = '') {
         default:
             return '';
     }
+}
+
+
+/**
+ * Get a customizable button for the latest post
+ *
+ * @param string $category Category slug or ID to filter by
+ * @param array $options Button options (text, bg, color)
+ * @return string HTML button
+ */
+function fluentcrm_get_latest_post_button($category = '', $options = []) {
+    $defaults = [
+        'text'  => 'Read Latest Post',
+        'bg'    => '#0073aa',
+        'color' => '#ffffff',
+    ];
+    $options = array_merge($defaults, $options);
+
+    $args = [
+        'post_type'      => 'post',
+        'post_status'    => 'publish',
+        'posts_per_page' => 1,
+        'orderby'        => 'date',
+        'order'          => 'DESC',
+    ];
+
+    if (!empty($category)) {
+        if (is_numeric($category)) {
+            $args['cat'] = intval($category);
+        } else {
+            $args['category_name'] = sanitize_text_field($category);
+        }
+    }
+
+    $posts = get_posts($args);
+    if (empty($posts)) return '';
+
+    $url = get_permalink($posts[0]->ID);
+
+    $style = sprintf(
+        'display: inline-block; background-color: %s; color: %s; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-size: 16px; font-weight: 600;',
+        esc_attr($options['bg']),
+        esc_attr($options['color'])
+    );
+
+    return '<a href="' . esc_url($url) . '" style="' . $style . '">' . esc_html($options['text']) . '</a>';
 }
 
 
