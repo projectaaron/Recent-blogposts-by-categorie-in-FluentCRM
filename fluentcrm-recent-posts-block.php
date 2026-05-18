@@ -36,6 +36,7 @@ add_action('fluent_crm/after_init', function () {
         'list_10'           => 'Recent Posts List (10 Posts)',
         'latest_title'      => 'Latest Post Title',
         'latest_excerpt'    => 'Latest Post Excerpt',
+        'latest_slug'       => 'Latest Post Slug (for custom URLs)',
         'latest_link'       => 'Latest Post URL (for buttons)',
         'latest_link_img'   => 'Latest Post URL (for images)',
         'latest_link_html'  => 'Latest Post Link (clickable)',
@@ -70,6 +71,9 @@ add_action('fluent_crm/after_init', function () {
 
             case 'latest_excerpt':
                 return fluentcrm_get_latest_post_field('excerpt', $category);
+
+            case 'latest_slug':
+                return fluentcrm_get_latest_post_field('slug', $category);
 
             case 'latest_link':
                 return fluentcrm_get_latest_post_field('link', $category);
@@ -227,6 +231,9 @@ function fluentcrm_get_latest_post_field($field, $category = '') {
         case 'excerpt':
             $excerpt = $post->post_excerpt ?: $post->post_content;
             return esc_html(wp_trim_words($excerpt, 30, '...'));
+
+        case 'slug':
+            return $post->post_name;
 
         case 'link':
             // Return full URL - FluentCRM 3.0 buttons don't auto-add http://
