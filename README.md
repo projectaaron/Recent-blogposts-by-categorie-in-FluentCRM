@@ -1,135 +1,94 @@
-# FluentCRM Recent Posts Block
+# Recent Posts SmartCodes for FluentCRM
 
-A custom PHP code snippet that adds a "Recent Posts" SmartCode block to the FluentCRM email editor.
+A single PHP snippet that adds a **Recent Posts** group to FluentCRM's SmartCode dropdown, so you can drop your latest blog posts (or the full latest post) into any campaign, sequence, or automation email. Works with any WordPress site running FluentCRM.
 
 ## Installation
 
-1. Copy the contents of `fluentcrm-recent-posts-block.php` to your theme's `functions.php` file
-2. Or create a custom plugin with this code
-3. Or use a code snippets plugin (like Code Snippets) to add the code
+Pick one:
 
-## Usage
+1. **FluentSnippets** (or the Code Snippets plugin): create a new PHP snippet, paste the contents of `fluentcrm-recent-posts-block.php`, save and activate.
+2. **Theme**: paste the code into your theme's `functions.php`.
+3. **Plugin**: drop the file into `wp-content/plugins/` and activate it (add a plugin header if you want it to show a name).
 
-### Method 1: SmartCodes (Recommended)
+No settings page. Everything is configured through the SmartCode name or the filters below.
 
-After installing, you'll see a new **"Recent Posts"** group in the SmartCode dropdown in the FluentCRM email editor.
+## SmartCodes
 
-Available SmartCodes:
+Open the SmartCode dropdown in the FluentCRM email editor and look for **Recent Posts**.
 
-| SmartCode | Description |
-|-----------|-------------|
-| `{{recent_posts.list}}` | Display 5 recent posts with thumbnails |
-| `{{recent_posts.list_3}}` | Display 3 recent posts |
-| `{{recent_posts.list_10}}` | Display 10 recent posts |
-| `{{recent_posts.latest_title}}` | Latest post title only |
-| `{{recent_posts.latest_excerpt}}` | Latest post excerpt only |
-| `{{recent_posts.latest_link}}` | Latest post URL |
+| SmartCode | Output |
+|-----------|--------|
+| `{{recent_posts.list}}` | 5 latest posts (thumbnail, title, excerpt, date) |
+| `{{recent_posts.list_3}}` | 3 latest posts |
+| `{{recent_posts.list_10}}` | 10 latest posts |
+| `{{recent_posts.latest_title}}` | Latest post title |
+| `{{recent_posts.latest_excerpt}}` | Latest post excerpt |
+| `{{recent_posts.latest_link}}` | Latest post URL without `https://` (for FluentCRM button/image link fields) |
+| `{{recent_posts.latest_link_html}}` | Latest post title as a clickable link |
+| `{{recent_posts.latest_button}}` | Styled "Read Latest Post" button |
 | `{{recent_posts.latest_image}}` | Latest post featured image |
-| `{{recent_posts.latest_full}}` | Full card layout for latest post |
+| `{{recent_posts.latest_full}}` | Latest post as a card (image, title, date, author, excerpt, button) |
+| `{{recent_posts.latest_body}}` | Full content of the latest post |
 
-### Method 2: Shortcode in HTML Block
+### Filter by category
 
-If using the Visual Builder, add an HTML block and use the shortcode:
+Append `_category_{slug-or-id}` to any SmartCode:
 
-```html
-[fluentcrm_recent_posts count="5" show_image="yes" show_excerpt="yes"]
+```
+{{recent_posts.list_3_category_news}}
+{{recent_posts.latest_body_category_12}}
+{{recent_posts.latest_full_category_press_releases}}
 ```
 
-#### Shortcode Parameters:
+Underscores in the slug are converted to hyphens, so `press_releases` matches the `press-releases` category. Numeric values are treated as category IDs.
 
-| Parameter | Default | Options | Description |
-|-----------|---------|---------|-------------|
-| `count` | 5 | Any number | Number of posts to display |
-| `show_image` | yes | yes/no | Show featured images |
-| `show_excerpt` | yes | yes/no | Show post excerpts |
-| `show_date` | yes | yes/no | Show post dates |
-| `category` | (all) | category-slug | Filter by category |
-| `post_type` | post | post/page/custom | Post type to query |
+## Shortcode
 
-#### Examples:
+For finer control (post type, hiding images, etc.) use the shortcode. It works in posts, pages, and inside FluentCRM emails.
 
-```html
-<!-- Show 3 posts from "news" category -->
-[fluentcrm_recent_posts count="3" category="news"]
-
-<!-- Show 5 posts without images -->
-[fluentcrm_recent_posts count="5" show_image="no"]
-
-<!-- Show custom post type -->
-[fluentcrm_recent_posts count="4" post_type="product"]
+```
+[upfluent_recent_posts count="5" category="news" show_image="yes" show_excerpt="yes" show_date="yes" post_type="post"]
 ```
 
-## Customization
+| Attribute | Default | Description |
+|-----------|---------|-------------|
+| `count` | `5` | Number of posts |
+| `category` | (all) | Category slug or ID |
+| `show_image` | `yes` | `yes` / `no` |
+| `show_excerpt` | `yes` | `yes` / `no` |
+| `show_date` | `yes` | `yes` / `no` |
+| `post_type` | `post` | Any public post type |
 
-### Modify the Query
+## Customization (filters)
 
-Use the `fluentcrm_recent_posts_query_args` filter to modify the post query:
+All filters are prefixed `upfluent_`. Ready-to-uncomment examples are at the bottom of the PHP file.
+
+| Filter | Arguments | Purpose |
+|--------|-----------|---------|
+| `upfluent_query_args` | `$args, $context` | Change the `WP_Query` args. `$context` is `list`, `latest`, `card`, or `body` so you can target one output. |
+| `upfluent_list_html` | `$html, $posts, $count` | Modify the posts list HTML |
+| `upfluent_card_html` | `$html, $post` | Modify the latest-post card HTML |
+| `upfluent_body_html` | `$html, $post` | Modify the full-content HTML |
+| `upfluent_body_styles` | `$css` | Inline CSS for the full-content wrapper |
+| `upfluent_button_label` | `$label` | Text of the `latest_button` |
+| `upfluent_empty_html` | `$html` | Output when no posts are found |
+
+Example: always pull `latest_body` from one category.
 
 ```php
-add_filter('fluentcrm_recent_posts_query_args', function($args) {
-    // Only show posts from specific category
-    $args['category_name'] = 'news';
-
-    // Exclude certain posts
-    $args['post__not_in'] = [123, 456];
-
-    return $args;
-});
+add_filter( 'upfluent_query_args', function ( $args, $context ) {
+	if ( 'body' === $context ) {
+		$args['category_name'] = 'news';
+	}
+	return $args;
+}, 10, 2 );
 ```
 
-### Customize the HTML Output
+## Notes
 
-Use the `fluentcrm_recent_posts_html` filter to modify the output:
-
-```php
-add_filter('fluentcrm_recent_posts_html', function($html, $posts, $count) {
-    // Add custom wrapper
-    return '<div class="my-custom-wrapper">' . $html . '</div>';
-}, 10, 3);
-```
-
-### Customize the Latest Post Card
-
-Use the `fluentcrm_latest_post_card_html` filter:
-
-```php
-add_filter('fluentcrm_latest_post_card_html', function($html, $post) {
-    // Modify the card HTML
-    return $html;
-}, 10, 2);
-```
-
-## Styling Notes
-
-- All HTML uses inline styles for email client compatibility
-- Uses table-based layouts for maximum email client support
-- Tested with major email clients (Gmail, Outlook, Apple Mail)
-- Responsive design considerations built-in
-
-## Requirements
-
-- WordPress 5.0+
-- FluentCRM 2.5+
-- PHP 7.4+
-
-## Hooks Reference
-
-### Actions
-- `fluent_crm/after_init` - Used to register the SmartCode
-
-### Filters
-- `fluentcrm_recent_posts_query_args` - Modify WP_Query arguments
-- `fluentcrm_recent_posts_html` - Modify the posts list HTML output
-- `fluentcrm_latest_post_card_html` - Modify the single post card HTML
-- `fluent_crm/email-body-text` - Process shortcodes in email content
-- `fluent_crm/parse_campaign_email_text` - Process shortcodes in campaigns
-
-## Resources
-
-- [FluentCRM Developer Documentation](https://developers.fluentcrm.com/)
-- [FluentCRM SmartCode Documentation](https://developers.fluentcrm.com/modules/smart-code/)
-- [FluentCRM Filter Hooks](https://developers.fluentcrm.com/hooks/filters/)
-- [FluentCRM Action Hooks](https://developers.fluentcrm.com/hooks/actions/)
+- Output uses table layouts and inline styles for email-client compatibility.
+- Only published posts are returned; sticky posts are not pinned to the top.
+- Requires WordPress 5.0+, FluentCRM 2.5+, PHP 7.4+.
 
 ## License
 
