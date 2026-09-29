@@ -1,644 +1,311 @@
 <?php
 /**
- * FluentCRM Recent Posts SmartCode Block
+ * Recent Posts SmartCodes for FluentCRM
  *
- * Add this code to your theme's functions.php file or create a custom plugin.
- * This adds a "Recent Posts" SmartCode to the FluentCRM email editor that you can
- * insert using the SmartCode dropdown: {{recent_posts.list}}
+ * Adds a "Recent Posts" group to FluentCRM's smart codes so you can drop your
+ * latest blog posts (or the full latest post) into any email.
  *
- * @package FluentCRM_Recent_Posts
- * @version 1.0.0
+ * Smart codes:
+ *   {{recent_posts.list}}              5 latest posts (thumbnail, title, excerpt, date)
+ *   {{recent_posts.list_3}}            3 latest posts
+ *   {{recent_posts.list_10}}           10 latest posts
+ *   {{recent_posts.latest_title}}      Latest post title
+ *   {{recent_posts.latest_excerpt}}    Latest post excerpt
+ *   {{recent_posts.latest_link}}       Latest post URL (without https://)
+ *   {{recent_posts.latest_link_html}}  Latest post title as a link
+ *   {{recent_posts.latest_button}}     "Read Latest Post" button
+ *   {{recent_posts.latest_image}}      Latest post featured image
+ *   {{recent_posts.latest_full}}       Latest post as a card
+ *   {{recent_posts.latest_body}}       Full content of the latest post
+ *
+ * Filter by category: add _category_{slug-or-id} to any code, e.g.
+ *   {{recent_posts.latest_body_category_news}}
+ *   {{recent_posts.list_3_category_12}}
+ * Underscores in the slug are converted to hyphens, so _category_press_releases
+ * matches the "press-releases" category.
+ *
+ * Shortcode (also works inside FluentCRM emails):
+ *   [upfluent_recent_posts count="5" category="news" show_image="yes" show_excerpt="yes" show_date="yes" post_type="post"]
+ *
+ * Install: paste into FluentSnippets (PHP snippet), a code snippets plugin,
+ * your theme's functions.php, or a small custom plugin.
+ *
+ * Customize: see the "Optional customizations" block at the bottom of this file.
+ *
+ * @package UpFluent_Recent_Posts
+ * @version 2.0.0
  */
 
-// Prevent direct access
-if (!defined('ABSPATH')) {
-    exit;
+defined( 'ABSPATH' ) || exit;
+
+/* -------------------------------------------------------------------------
+ * Register the smart codes
+ * ---------------------------------------------------------------------- */
+add_action( 'fluent_crm/after_init', function () {
+	$codes = array(
+		'list'             => 'Recent Posts List (5 posts)',
+		'list_3'           => 'Recent Posts List (3 posts)',
+		'list_10'          => 'Recent Posts List (10 posts)',
+		'latest_title'     => 'Latest Post Title',
+		'latest_excerpt'   => 'Latest Post Excerpt',
+		'latest_link'      => 'Latest Post URL (raw)',
+		'latest_link_html' => 'Latest Post Link (clickable)',
+		'latest_button'    => 'Latest Post Button',
+		'latest_image'     => 'Latest Post Featured Image',
+		'latest_full'      => 'Latest Post (Full Card)',
+		'latest_body'      => 'Latest Post Full Content',
+	);
+
+	FluentCrmApi( 'extender' )->addSmartCode( 'recent_posts', 'Recent Posts', $codes, function ( $code, $value_key, $default, $subscriber ) {
+		$category = '';
+		if ( preg_match( '/^(.+?)_category_(.+)$/', $value_key, $m ) ) {
+			$value_key = $m[1];
+			$category  = $m[2];
+		}
+
+		switch ( $value_key ) {
+			case 'list':
+				return upfluent_list_html( 5, $category );
+			case 'list_3':
+				return upfluent_list_html( 3, $category );
+			case 'list_10':
+				return upfluent_list_html( 10, $category );
+			case 'latest_title':
+			case 'latest_excerpt':
+			case 'latest_link':
+			case 'latest_link_html':
+			case 'latest_button':
+			case 'latest_image':
+				return upfluent_latest_field( substr( $value_key, 7 ), $category );
+			case 'latest_full':
+				return upfluent_latest_card( $category );
+			case 'latest_body':
+				return upfluent_latest_body( $category );
+		}
+		return $default;
+	} );
+} );
+
+/* -------------------------------------------------------------------------
+ * Helpers
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Fetch posts. $context lets filters target one output (list, latest, card, body).
+ */
+function upfluent_get_posts( $count = 5, $category = '', $context = 'list', $post_type = 'post' ) {
+	$args = array(
+		'post_type'           => $post_type,
+		'post_status'         => 'publish',
+		'posts_per_page'      => max( 1, (int) $count ),
+		'orderby'             => 'date',
+		'order'               => 'DESC',
+		'ignore_sticky_posts' => true,
+		'no_found_rows'       => true,
+	);
+
+	$category = trim( (string) $category );
+	if ( '' !== $category ) {
+		if ( is_numeric( $category ) ) {
+			$args['cat'] = (int) $category;
+		} else {
+			$args['category_name'] = sanitize_title( str_replace( '_', '-', $category ) );
+		}
+	}
+
+	$args = apply_filters( 'upfluent_query_args', $args, $context );
+	return get_posts( $args );
+}
+
+function upfluent_excerpt( $post, $words ) {
+	$text = $post->post_excerpt ? $post->post_excerpt : strip_shortcodes( $post->post_content );
+	return esc_html( wp_trim_words( $text, $words, '…' ) );
+}
+
+function upfluent_empty() {
+	return apply_filters( 'upfluent_empty_html', '<p style="color:#666666;font-style:italic;">No recent posts available.</p>' );
 }
 
 /**
- * Register Custom Recent Posts SmartCode for FluentCRM
- *
- * This creates a new SmartCode group "Recent Posts" in the FluentCRM email editor
- * that allows you to dynamically insert recent blog posts into your emails.
+ * Email-safe list of posts (table layout, inline styles).
  */
-add_action('fluent_crm/after_init', function () {
+function upfluent_list_html( $count = 5, $category = '', $opts = array(), $post_type = 'post' ) {
+	$opts  = wp_parse_args( $opts, array( 'image' => true, 'excerpt' => true, 'date' => true ) );
+	$posts = upfluent_get_posts( $count, $category, 'list', $post_type );
+	if ( empty( $posts ) ) {
+		return upfluent_empty();
+	}
 
-    // Unique key for this smartcode group (prefixed to avoid conflicts)
-    $key = 'recent_posts';
+	$html = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;margin:20px 0;">';
 
-    // Title shown in the SmartCode dropdown
-    $title = 'Recent Posts';
+	foreach ( $posts as $post ) {
+		$url   = esc_url( get_permalink( $post ) );
+		$title = esc_html( get_the_title( $post ) );
+		$thumb = $opts['image'] ? get_the_post_thumbnail_url( $post, 'thumbnail' ) : '';
 
-    // Available SmartCodes in this group
-    $shortCodes = [
-        'list'              => 'Recent Posts List (Default 5)',
-        'list_3'            => 'Recent Posts List (3 Posts)',
-        'list_10'           => 'Recent Posts List (10 Posts)',
-        'latest_title'      => 'Latest Post Title',
-        'latest_excerpt'    => 'Latest Post Excerpt',
-        'latest_slug'       => 'Latest Post Slug (for custom URLs)',
-        'latest_link'       => 'Latest Post URL (for buttons)',
-        'latest_link_img'   => 'Latest Post URL (for images)',
-        'latest_link_html'  => 'Latest Post Link (clickable)',
-        'latest_button'     => 'Latest Post Button (styled)',
-        'latest_image'      => 'Latest Post Featured Image',
-        'latest_full'       => 'Latest Post (Full Card)',
-        'latest_body'       => 'Latest Post Full HTML Body',
-    ];
+		$html .= '<tr><td style="padding:15px 0;border-bottom:1px solid #e5e5e5;vertical-align:top;">';
+		$html .= '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>';
 
-    // Callback function that returns the actual content
-    $callback = function ($code, $valueKey, $defaultValue, $subscriber) {
+		if ( $thumb ) {
+			$html .= '<td width="80" style="padding-right:15px;vertical-align:top;">';
+			$html .= '<a href="' . $url . '" style="text-decoration:none;"><img src="' . esc_url( $thumb ) . '" alt="' . esc_attr( get_the_title( $post ) ) . '" width="80" height="80" style="display:block;border-radius:4px;object-fit:cover;" /></a>';
+			$html .= '</td>';
+		}
 
-        // Parse options from SmartCode key
-        // Format: latest_button_text_Listen Now_bg_8B4513_color_ffffff_category_107
-        $category = '';
-        $button_text = 'Read Latest Post';
-        $button_bg = '#0073aa';
-        $button_color = '#ffffff';
+		$html .= '<td style="vertical-align:top;">';
+		$html .= '<a href="' . $url . '" style="color:#333333;text-decoration:none;font-size:16px;font-weight:600;line-height:1.4;display:block;margin-bottom:5px;">' . $title . '</a>';
+		if ( $opts['excerpt'] ) {
+			$html .= '<p style="color:#666666;font-size:14px;line-height:1.5;margin:0 0 8px 0;">' . upfluent_excerpt( $post, 20 ) . '</p>';
+		}
+		if ( $opts['date'] ) {
+			$html .= '<span style="color:#999999;font-size:12px;">' . esc_html( get_the_date( 'M j, Y', $post ) ) . '</span>';
+		}
+		$html .= '</td></tr></table></td></tr>';
+	}
 
-        // Extract category
-        if (preg_match('/_category_([^_]+)$/', $valueKey, $matches)) {
-            $category = $matches[1];
-            $valueKey = preg_replace('/_category_[^_]+$/', '', $valueKey);
-        }
-
-        // Extract button text (supports spaces replaced with -)
-        if (preg_match('/_text_([^_]+(?:-[^_]+)*)/', $valueKey, $matches)) {
-            $button_text = str_replace('-', ' ', $matches[1]);
-            $valueKey = preg_replace('/_text_[^_]+(?:-[^_]+)*/', '', $valueKey);
-        }
-
-        // Extract background color
-        if (preg_match('/_bg_([a-fA-F0-9]{3,6})/', $valueKey, $matches)) {
-            $button_bg = '#' . $matches[1];
-            $valueKey = preg_replace('/_bg_[a-fA-F0-9]{3,6}/', '', $valueKey);
-        }
-
-        // Extract text color
-        if (preg_match('/_color_([a-fA-F0-9]{3,6})/', $valueKey, $matches)) {
-            $button_color = '#' . $matches[1];
-            $valueKey = preg_replace('/_color_[a-fA-F0-9]{3,6}/', '', $valueKey);
-        }
-
-        $button_options = [
-            'text'  => $button_text,
-            'bg'    => $button_bg,
-            'color' => $button_color,
-        ];
-
-        switch ($valueKey) {
-            case 'list':
-                return fluentcrm_get_recent_posts_html(5, $category);
-
-            case 'list_3':
-                return fluentcrm_get_recent_posts_html(3, $category);
-
-            case 'list_10':
-                return fluentcrm_get_recent_posts_html(10, $category);
-
-            case 'latest_title':
-                return fluentcrm_get_latest_post_field('title', $category);
-
-            case 'latest_excerpt':
-                return fluentcrm_get_latest_post_field('excerpt', $category);
-
-            case 'latest_slug':
-                return fluentcrm_get_latest_post_field('slug', $category);
-
-            case 'latest_link':
-                return fluentcrm_get_latest_post_field('link', $category);
-
-            case 'latest_link_img':
-                return fluentcrm_get_latest_post_field('link_img', $category);
-
-            case 'latest_link_html':
-                return fluentcrm_get_latest_post_field('link_html', $category);
-
-            case 'latest_button':
-                return fluentcrm_get_latest_post_button($category, $button_options);
-
-            case 'latest_image':
-                return fluentcrm_get_latest_post_field('image', $category);
-
-            case 'latest_full':
-                return fluentcrm_get_latest_post_card($category);
-
-            case 'latest_body':
-                return fluentcrm_get_latest_post_body($category);
-
-            default:
-                return $defaultValue;
-        }
-    };
-
-    // Register the SmartCode with FluentCRM
-    FluentCrmApi('extender')->addSmartCode($key, $title, $shortCodes, $callback);
-
-}, 10);
-
-
-/**
- * Generate HTML for recent posts list
- *
- * @param int $count Number of posts to display
- * @param string $category Category slug to filter by
- * @return string HTML output
- */
-function fluentcrm_get_recent_posts_html($count = 5, $category = '') {
-
-    $args = [
-        'post_type'      => 'post',
-        'post_status'    => 'publish',
-        'posts_per_page' => $count,
-        'orderby'        => 'date',
-        'order'          => 'DESC',
-    ];
-
-    // Filter by category if specified (supports both ID and slug)
-    if (!empty($category)) {
-        if (is_numeric($category)) {
-            $args['cat'] = intval($category);
-        } else {
-            $args['category_name'] = sanitize_text_field($category);
-        }
-    }
-
-    // Allow filtering the query args
-    $args = apply_filters('fluentcrm_recent_posts_query_args', $args);
-
-    $posts = get_posts($args);
-
-    if (empty($posts)) {
-        return '<p style="color: #666; font-style: italic;">No recent posts available.</p>';
-    }
-
-    // Build the HTML output - email-safe inline styles
-    $html = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: collapse; margin: 20px 0;">';
-
-    foreach ($posts as $post) {
-        $permalink = get_permalink($post->ID);
-        $title = esc_html($post->post_title);
-        $excerpt = wp_trim_words($post->post_excerpt ?: $post->post_content, 20, '...');
-        $excerpt = esc_html($excerpt);
-        $date = get_the_date('M j, Y', $post->ID);
-        $thumbnail = get_the_post_thumbnail_url($post->ID, 'thumbnail');
-
-        $html .= '<tr>';
-        $html .= '<td style="padding: 15px 0; border-bottom: 1px solid #e5e5e5; vertical-align: top;">';
-
-        // Container table for image + content layout
-        $html .= '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">';
-        $html .= '<tr>';
-
-        // Featured image column (if exists)
-        if ($thumbnail) {
-            $html .= '<td width="80" style="padding-right: 15px; vertical-align: top;">';
-            $html .= '<a href="' . esc_url($permalink) . '" style="text-decoration: none;">';
-            $html .= '<img src="' . esc_url($thumbnail) . '" alt="' . $title . '" width="80" height="80" style="display: block; border-radius: 4px; object-fit: cover;" />';
-            $html .= '</a>';
-            $html .= '</td>';
-        }
-
-        // Content column
-        $html .= '<td style="vertical-align: top;">';
-        $html .= '<a href="' . esc_url($permalink) . '" style="color: #333333; text-decoration: none; font-size: 16px; font-weight: 600; line-height: 1.4; display: block; margin-bottom: 5px;">' . $title . '</a>';
-        $html .= '<p style="color: #666666; font-size: 14px; line-height: 1.5; margin: 0 0 8px 0;">' . $excerpt . '</p>';
-        $html .= '<span style="color: #999999; font-size: 12px;">' . $date . '</span>';
-        $html .= '</td>';
-
-        $html .= '</tr>';
-        $html .= '</table>';
-
-        $html .= '</td>';
-        $html .= '</tr>';
-    }
-
-    $html .= '</table>';
-
-    // Allow filtering the final HTML output
-    return apply_filters('fluentcrm_recent_posts_html', $html, $posts, $count);
+	$html .= '</table>';
+	return apply_filters( 'upfluent_list_html', $html, $posts, $count );
 }
 
-
 /**
- * Get a specific field from the latest post
- *
- * @param string $field Field to retrieve (title, excerpt, link, image)
- * @param string $category Category slug to filter by
- * @return string Field value or empty string
+ * A single field from the latest post.
  */
-function fluentcrm_get_latest_post_field($field, $category = '') {
+function upfluent_latest_field( $field, $category = '' ) {
+	$posts = upfluent_get_posts( 1, $category, 'latest' );
+	if ( empty( $posts ) ) {
+		return '';
+	}
+	$post  = $posts[0];
+	$url   = get_permalink( $post );
+	$title = get_the_title( $post );
 
-    $args = [
-        'post_type'      => 'post',
-        'post_status'    => 'publish',
-        'posts_per_page' => 1,
-        'orderby'        => 'date',
-        'order'          => 'DESC',
-    ];
-
-    // Filter by category if specified (supports both ID and slug)
-    if (!empty($category)) {
-        if (is_numeric($category)) {
-            $args['cat'] = intval($category);
-        } else {
-            $args['category_name'] = sanitize_text_field($category);
-        }
-    }
-
-    $posts = get_posts($args);
-
-    if (empty($posts)) {
-        return '';
-    }
-
-    $post = $posts[0];
-
-    switch ($field) {
-        case 'title':
-            return esc_html($post->post_title);
-
-        case 'excerpt':
-            $excerpt = $post->post_excerpt ?: $post->post_content;
-            return esc_html(wp_trim_words($excerpt, 30, '...'));
-
-        case 'slug':
-            return $post->post_name;
-
-        case 'link':
-            // Return full URL - FluentCRM 3.0 buttons don't auto-add http://
-            return get_permalink($post->ID);
-
-        case 'link_img':
-            // Strip protocol - FluentCRM 3.0 image links still auto-add http://
-            $url = get_permalink($post->ID);
-            return preg_replace('#^https?://#', '', $url);
-
-        case 'link_html':
-            $url = get_permalink($post->ID);
-            $title = esc_html($post->post_title);
-            return '<a href="' . esc_url($url) . '" style="color: #0073aa; text-decoration: underline;">' . $title . '</a>';
-
-        case 'button':
-            $url = get_permalink($post->ID);
-            return '<a href="' . esc_url($url) . '" style="display: inline-block; background-color: #0073aa; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-size: 16px; font-weight: 600;">Read Latest Post</a>';
-
-        case 'image':
-            $thumbnail = get_the_post_thumbnail_url($post->ID, 'medium');
-            if ($thumbnail) {
-                return '<img src="' . esc_url($thumbnail) . '" alt="' . esc_attr($post->post_title) . '" style="max-width: 100%; height: auto; border-radius: 4px; display: block;" />';
-            }
-            return '';
-
-        default:
-            return '';
-    }
+	switch ( $field ) {
+		case 'title':
+			return esc_html( $title );
+		case 'excerpt':
+			return upfluent_excerpt( $post, 30 );
+		case 'link':
+			return preg_replace( '#^https?://#', '', $url );
+		case 'link_html':
+			return '<a href="' . esc_url( $url ) . '" style="color:#0073aa;text-decoration:underline;">' . esc_html( $title ) . '</a>';
+		case 'button':
+			$label = apply_filters( 'upfluent_button_label', 'Read Latest Post' );
+			return '<a href="' . esc_url( $url ) . '" style="display:inline-block;background-color:#0073aa;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:4px;font-size:16px;font-weight:600;">' . esc_html( $label ) . '</a>';
+		case 'image':
+			$img = get_the_post_thumbnail_url( $post, 'medium' );
+			return $img ? '<img src="' . esc_url( $img ) . '" alt="' . esc_attr( $title ) . '" style="max-width:100%;height:auto;border-radius:4px;display:block;" />' : '';
+	}
+	return '';
 }
 
-
 /**
- * Get a customizable button for the latest post
- *
- * @param string $category Category slug or ID to filter by
- * @param array $options Button options (text, bg, color)
- * @return string HTML button
+ * Latest post as a card: image, title, date, author, excerpt, button.
  */
-function fluentcrm_get_latest_post_button($category = '', $options = []) {
-    $defaults = [
-        'text'  => 'Read Latest Post',
-        'bg'    => '#0073aa',
-        'color' => '#ffffff',
-    ];
-    $options = array_merge($defaults, $options);
+function upfluent_latest_card( $category = '' ) {
+	$posts = upfluent_get_posts( 1, $category, 'card' );
+	if ( empty( $posts ) ) {
+		return upfluent_empty();
+	}
+	$post   = $posts[0];
+	$url    = esc_url( get_permalink( $post ) );
+	$title  = esc_html( get_the_title( $post ) );
+	$author = get_the_author_meta( 'display_name', $post->post_author );
+	$img    = get_the_post_thumbnail_url( $post, 'large' );
 
-    $args = [
-        'post_type'      => 'post',
-        'post_status'    => 'publish',
-        'posts_per_page' => 1,
-        'orderby'        => 'date',
-        'order'          => 'DESC',
-    ];
+	$html = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;margin:20px 0;background-color:#ffffff;border:1px solid #e5e5e5;border-radius:8px;overflow:hidden;">';
 
-    if (!empty($category)) {
-        if (is_numeric($category)) {
-            $args['cat'] = intval($category);
-        } else {
-            $args['category_name'] = sanitize_text_field($category);
-        }
-    }
+	if ( $img ) {
+		$html .= '<tr><td style="padding:0;"><a href="' . $url . '" style="text-decoration:none;"><img src="' . esc_url( $img ) . '" alt="' . esc_attr( get_the_title( $post ) ) . '" width="100%" style="display:block;max-width:100%;height:auto;" /></a></td></tr>';
+	}
 
-    $posts = get_posts($args);
-    if (empty($posts)) return '';
+	$html .= '<tr><td style="padding:20px;">';
+	$html .= '<a href="' . $url . '" style="color:#333333;text-decoration:none;font-size:22px;font-weight:700;line-height:1.3;display:block;margin-bottom:10px;">' . $title . '</a>';
+	$html .= '<p style="color:#999999;font-size:13px;margin:0 0 12px 0;">' . esc_html( get_the_date( 'F j, Y', $post ) );
+	if ( $author ) {
+		$html .= ' &bull; By ' . esc_html( $author );
+	}
+	$html .= '</p>';
+	$html .= '<p style="color:#555555;font-size:15px;line-height:1.6;margin:0 0 15px 0;">' . upfluent_excerpt( $post, 40 ) . '</p>';
+	$html .= '<a href="' . $url . '" style="display:inline-block;background-color:#0073aa;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:4px;font-size:14px;font-weight:600;">Read More &rarr;</a>';
+	$html .= '</td></tr></table>';
 
-    $url = get_permalink($posts[0]->ID);
-
-    $style = sprintf(
-        'display: inline-block; background-color: %s; color: %s; text-decoration: none; padding: 12px 24px; border-radius: 4px; font-size: 16px; font-weight: 600;',
-        esc_attr($options['bg']),
-        esc_attr($options['color'])
-    );
-
-    return '<a href="' . esc_url($url) . '" style="' . $style . '">' . esc_html($options['text']) . '</a>';
+	return apply_filters( 'upfluent_card_html', $html, $post );
 }
 
-
 /**
- * Get a full card layout for the latest post
- *
- * @param string $category Category slug to filter by
- * @return string HTML card for the latest post
+ * Full content of the latest post, wrapped in a styled container.
  */
-function fluentcrm_get_latest_post_card($category = '') {
+function upfluent_latest_body( $category = '' ) {
+	$posts = upfluent_get_posts( 1, $category, 'body' );
+	if ( empty( $posts ) ) {
+		return '';
+	}
+	$post    = $posts[0];
+	$content = apply_filters( 'the_content', $post->post_content );
+	$styles  = apply_filters( 'upfluent_body_styles', 'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:16px;line-height:1.6;color:#333333;' );
 
-    $args = [
-        'post_type'      => 'post',
-        'post_status'    => 'publish',
-        'posts_per_page' => 1,
-        'orderby'        => 'date',
-        'order'          => 'DESC',
-    ];
-
-    // Filter by category if specified (supports both ID and slug)
-    if (!empty($category)) {
-        if (is_numeric($category)) {
-            $args['cat'] = intval($category);
-        } else {
-            $args['category_name'] = sanitize_text_field($category);
-        }
-    }
-
-    $posts = get_posts($args);
-
-    if (empty($posts)) {
-        return '<p style="color: #666; font-style: italic;">No recent posts available.</p>';
-    }
-
-    $post = $posts[0];
-    $permalink = get_permalink($post->ID);
-    $title = esc_html($post->post_title);
-    $excerpt = wp_trim_words($post->post_excerpt ?: $post->post_content, 40, '...');
-    $excerpt = esc_html($excerpt);
-    $date = get_the_date('F j, Y', $post->ID);
-    $author = get_the_author_meta('display_name', $post->post_author);
-    $thumbnail = get_the_post_thumbnail_url($post->ID, 'large');
-
-    // Build card HTML with email-safe inline styles
-    $html = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: collapse; margin: 20px 0; background-color: #ffffff; border: 1px solid #e5e5e5; border-radius: 8px; overflow: hidden;">';
-
-    // Featured image row
-    if ($thumbnail) {
-        $html .= '<tr>';
-        $html .= '<td style="padding: 0;">';
-        $html .= '<a href="' . esc_url($permalink) . '" style="text-decoration: none;">';
-        $html .= '<img src="' . esc_url($thumbnail) . '" alt="' . $title . '" width="100%" style="display: block; max-width: 100%; height: auto;" />';
-        $html .= '</a>';
-        $html .= '</td>';
-        $html .= '</tr>';
-    }
-
-    // Content row
-    $html .= '<tr>';
-    $html .= '<td style="padding: 20px;">';
-
-    // Title
-    $html .= '<a href="' . esc_url($permalink) . '" style="color: #333333; text-decoration: none; font-size: 22px; font-weight: 700; line-height: 1.3; display: block; margin-bottom: 10px;">' . $title . '</a>';
-
-    // Meta info
-    $html .= '<p style="color: #999999; font-size: 13px; margin: 0 0 12px 0;">';
-    $html .= '<span>' . esc_html($date) . '</span>';
-    if ($author) {
-        $html .= ' &bull; <span>By ' . esc_html($author) . '</span>';
-    }
-    $html .= '</p>';
-
-    // Excerpt
-    $html .= '<p style="color: #555555; font-size: 15px; line-height: 1.6; margin: 0 0 15px 0;">' . $excerpt . '</p>';
-
-    // Read more button
-    $html .= '<a href="' . esc_url($permalink) . '" style="display: inline-block; background-color: #0073aa; color: #ffffff; text-decoration: none; padding: 10px 20px; border-radius: 4px; font-size: 14px; font-weight: 600;">Read More &rarr;</a>';
-
-    $html .= '</td>';
-    $html .= '</tr>';
-
-    $html .= '</table>';
-
-    return apply_filters('fluentcrm_latest_post_card_html', $html, $post);
+	return apply_filters( 'upfluent_body_html', '<div style="' . esc_attr( $styles ) . '">' . $content . '</div>', $post );
 }
 
+/* -------------------------------------------------------------------------
+ * Shortcode: [upfluent_recent_posts]
+ * ---------------------------------------------------------------------- */
+add_shortcode( 'upfluent_recent_posts', function ( $atts ) {
+	$atts = shortcode_atts( array(
+		'count'        => 5,
+		'category'     => '',
+		'show_image'   => 'yes',
+		'show_excerpt' => 'yes',
+		'show_date'    => 'yes',
+		'post_type'    => 'post',
+	), $atts, 'upfluent_recent_posts' );
 
-/**
- * Get the full HTML body/content of the latest post
- *
- * @param string $category Category slug to filter by
- * @return string Full HTML content of the latest post
- */
-function fluentcrm_get_latest_post_body($category = '') {
+	return upfluent_list_html(
+		(int) $atts['count'],
+		$atts['category'],
+		array(
+			'image'   => 'yes' === $atts['show_image'],
+			'excerpt' => 'yes' === $atts['show_excerpt'],
+			'date'    => 'yes' === $atts['show_date'],
+		),
+		sanitize_key( $atts['post_type'] )
+	);
+} );
 
-    $args = [
-        'post_type'      => 'post',
-        'post_status'    => 'publish',
-        'posts_per_page' => 1,
-        'orderby'        => 'date',
-        'order'          => 'DESC',
-    ];
+// Run the shortcode inside FluentCRM emails.
+add_filter( 'fluent_crm/parse_campaign_email_text', function ( $content ) {
+	return has_shortcode( $content, 'upfluent_recent_posts' ) ? do_shortcode( $content ) : $content;
+}, 10, 1 );
 
-    // Filter by category if specified (supports both ID and slug)
-    if (!empty($category)) {
-        if (is_numeric($category)) {
-            $args['cat'] = intval($category);
-        } else {
-            $args['category_name'] = sanitize_text_field($category);
-        }
-    }
+/* -------------------------------------------------------------------------
+ * Optional customizations (uncomment and edit)
+ * ---------------------------------------------------------------------- */
 
-    // Allow filtering the query args
-    $args = apply_filters('fluentcrm_latest_post_body_query_args', $args);
+// Always pull {{recent_posts.latest_body}} from one category (use the category slug):
+// add_filter( 'upfluent_query_args', function ( $args, $context ) {
+// 	if ( 'body' === $context ) {
+// 		$args['category_name'] = 'news';
+// 	}
+// 	return $args;
+// }, 10, 2 );
 
-    $posts = get_posts($args);
+// Exclude specific posts from every output:
+// add_filter( 'upfluent_query_args', function ( $args ) {
+// 	$args['post__not_in'] = array( 123, 456 );
+// 	return $args;
+// } );
 
-    if (empty($posts)) {
-        return '';
-    }
+// Change the look of the full-content email:
+// add_filter( 'upfluent_body_styles', function () {
+// 	return 'font-family:Georgia,serif;font-size:18px;line-height:1.8;color:#222222;background:#ffffff;padding:30px;';
+// } );
 
-    $post = $posts[0];
+// Change the button text:
+// add_filter( 'upfluent_button_label', function () {
+// 	return 'Read today\'s post';
+// } );
 
-    // Get the full post content with filters applied (shortcodes, embeds, etc.)
-    $content = apply_filters('the_content', $post->post_content);
-
-    // Default inline styles for the container - can be filtered
-    $default_styles = 'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; font-size: 16px; line-height: 1.6; color: #333333;';
-    $container_styles = apply_filters('fluentcrm_latest_post_body_styles', $default_styles);
-
-    // Wrap in a styled div container so it can be styled as a block
-    $html = '<div style="' . esc_attr($container_styles) . '">' . $content . '</div>';
-
-    // Allow filtering the final output
-    return apply_filters('fluentcrm_latest_post_body_html', $html, $post);
-}
-
-
-/**
- * Optional: Add a shortcode that can be used in the Visual Builder HTML block
- * Usage: [fluentcrm_recent_posts count="5" show_image="yes" show_excerpt="yes"]
- */
-add_shortcode('fluentcrm_recent_posts', function($atts) {
-
-    $atts = shortcode_atts([
-        'count'        => 5,
-        'show_image'   => 'yes',
-        'show_excerpt' => 'yes',
-        'show_date'    => 'yes',
-        'category'     => '',
-        'post_type'    => 'post',
-    ], $atts);
-
-    $args = [
-        'post_type'      => sanitize_text_field($atts['post_type']),
-        'post_status'    => 'publish',
-        'posts_per_page' => intval($atts['count']),
-        'orderby'        => 'date',
-        'order'          => 'DESC',
-    ];
-
-    // Filter by category if specified (supports both ID and slug)
-    if (!empty($atts['category'])) {
-        if (is_numeric($atts['category'])) {
-            $args['cat'] = intval($atts['category']);
-        } else {
-            $args['category_name'] = sanitize_text_field($atts['category']);
-        }
-    }
-
-    $posts = get_posts($args);
-
-    if (empty($posts)) {
-        return '<p style="color: #666; font-style: italic;">No recent posts available.</p>';
-    }
-
-    $show_image = ($atts['show_image'] === 'yes');
-    $show_excerpt = ($atts['show_excerpt'] === 'yes');
-    $show_date = ($atts['show_date'] === 'yes');
-
-    // Build the HTML output
-    $html = '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse: collapse; margin: 20px 0;">';
-
-    foreach ($posts as $post) {
-        $permalink = get_permalink($post->ID);
-        $title = esc_html($post->post_title);
-        $excerpt = wp_trim_words($post->post_excerpt ?: $post->post_content, 20, '...');
-        $excerpt = esc_html($excerpt);
-        $date = get_the_date('M j, Y', $post->ID);
-        $thumbnail = get_the_post_thumbnail_url($post->ID, 'thumbnail');
-
-        $html .= '<tr>';
-        $html .= '<td style="padding: 15px 0; border-bottom: 1px solid #e5e5e5; vertical-align: top;">';
-
-        $html .= '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">';
-        $html .= '<tr>';
-
-        // Featured image column
-        if ($show_image && $thumbnail) {
-            $html .= '<td width="80" style="padding-right: 15px; vertical-align: top;">';
-            $html .= '<a href="' . esc_url($permalink) . '" style="text-decoration: none;">';
-            $html .= '<img src="' . esc_url($thumbnail) . '" alt="' . $title . '" width="80" height="80" style="display: block; border-radius: 4px; object-fit: cover;" />';
-            $html .= '</a>';
-            $html .= '</td>';
-        }
-
-        // Content column
-        $html .= '<td style="vertical-align: top;">';
-        $html .= '<a href="' . esc_url($permalink) . '" style="color: #333333; text-decoration: none; font-size: 16px; font-weight: 600; line-height: 1.4; display: block; margin-bottom: 5px;">' . $title . '</a>';
-
-        if ($show_excerpt) {
-            $html .= '<p style="color: #666666; font-size: 14px; line-height: 1.5; margin: 0 0 8px 0;">' . $excerpt . '</p>';
-        }
-
-        if ($show_date) {
-            $html .= '<span style="color: #999999; font-size: 12px;">' . $date . '</span>';
-        }
-
-        $html .= '</td>';
-        $html .= '</tr>';
-        $html .= '</table>';
-
-        $html .= '</td>';
-        $html .= '</tr>';
-    }
-
-    $html .= '</table>';
-
-    return $html;
-});
-
-
-/**
- * Customizable Button Shortcode
- * Usage: [fluentcrm_button text="Listen Now" bg_color="#0073aa" text_color="#ffffff" category="107"]
- */
-add_shortcode('fluentcrm_button', function($atts) {
-    $atts = shortcode_atts([
-        'text'        => 'Read Latest Post',
-        'bg_color'    => '#0073aa',
-        'text_color'  => '#ffffff',
-        'padding'     => '12px 24px',
-        'font_size'   => '16px',
-        'font_weight' => '600',
-        'radius'      => '4px',
-        'category'    => '',
-        'post_type'   => 'post',
-    ], $atts);
-
-    $args = [
-        'post_type'      => sanitize_text_field($atts['post_type']),
-        'post_status'    => 'publish',
-        'posts_per_page' => 1,
-        'orderby'        => 'date',
-        'order'          => 'DESC',
-    ];
-
-    if (!empty($atts['category'])) {
-        if (is_numeric($atts['category'])) {
-            $args['cat'] = intval($atts['category']);
-        } else {
-            $args['category_name'] = sanitize_text_field($atts['category']);
-        }
-    }
-
-    $posts = get_posts($args);
-    if (empty($posts)) return '';
-
-    $url = get_permalink($posts[0]->ID);
-
-    $style = sprintf(
-        'display: inline-block; background-color: %s; color: %s; text-decoration: none; padding: %s; border-radius: %s; font-size: %s; font-weight: %s;',
-        esc_attr($atts['bg_color']),
-        esc_attr($atts['text_color']),
-        esc_attr($atts['padding']),
-        esc_attr($atts['radius']),
-        esc_attr($atts['font_size']),
-        esc_attr($atts['font_weight'])
-    );
-
-    return '<a href="' . esc_url($url) . '" style="' . $style . '">' . esc_html($atts['text']) . '</a>';
-});
-
-
-/**
- * Process shortcodes in FluentCRM email content
- * This ensures the shortcode works when used in the Visual Builder HTML block
- */
-add_filter('fluent_crm/email-body-text', function($content, $subscriber) {
-    // Process our shortcodes in the email content
-    if (has_shortcode($content, 'fluentcrm_recent_posts') || has_shortcode($content, 'fluentcrm_button')) {
-        $content = do_shortcode($content);
-    }
-    return $content;
-}, 10, 2);
-
-// Also handle the raw email content filter
-add_filter('fluent_crm/parse_campaign_email_text', function($content, $subscriber) {
-    if (has_shortcode($content, 'fluentcrm_recent_posts') || has_shortcode($content, 'fluentcrm_button')) {
-        $content = do_shortcode($content);
-    }
-    return $content;
-}, 10, 2);
+// Change the "no posts" message:
+// add_filter( 'upfluent_empty_html', function () {
+// 	return '';
+// } );
