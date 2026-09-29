@@ -11,7 +11,9 @@
  *   {{recent_posts.list_10}}           10 latest posts
  *   {{recent_posts.latest_title}}      Latest post title
  *   {{recent_posts.latest_excerpt}}    Latest post excerpt
- *   {{recent_posts.latest_link}}       Latest post URL (without https://)
+ *   {{recent_posts.latest_url}}        Latest post full URL (https://...)
+ *   {{recent_posts.latest_link}}       Latest post URL without https:// (for fields that add it)
+ *   {{recent_posts.latest_slug}}       Latest post slug (for building custom URLs)
  *   {{recent_posts.latest_link_html}}  Latest post title as a link
  *   {{recent_posts.latest_button}}     "Read Latest Post" button
  *   {{recent_posts.latest_image}}      Latest post featured image
@@ -24,8 +26,13 @@
  * Underscores in the slug are converted to hyphens, so _category_press_releases
  * matches the "press-releases" category.
  *
- * Shortcode (also works inside FluentCRM emails):
+ * Button options: add _text_{label}, _bg_{hex} and/or _color_{hex} to latest_button.
+ * Use hyphens for spaces in the label. Hex colors without the #. Example:
+ *   {{recent_posts.latest_button_text_Listen-Now_bg_8B4513_color_ffffff_category_news}}
+ *
+ * Shortcodes (also work inside FluentCRM emails):
  *   [upfluent_recent_posts count="5" category="news" show_image="yes" show_excerpt="yes" show_date="yes" post_type="post"]
+ *   [upfluent_button text="Listen Now" bg_color="#0073aa" text_color="#ffffff" category="news" post_type="post"]
  *
  * Install: paste into FluentSnippets (PHP snippet), a code snippets plugin,
  * your theme's functions.php, or a small custom plugin.
@@ -48,7 +55,9 @@ add_action( 'fluent_crm/after_init', function () {
 		'list_10'          => 'Recent Posts List (10 posts)',
 		'latest_title'     => 'Latest Post Title',
 		'latest_excerpt'   => 'Latest Post Excerpt',
-		'latest_link'      => 'Latest Post URL (raw)',
+		'latest_url'       => 'Latest Post URL (full)',
+		'latest_link'      => 'Latest Post URL (no https://)',
+		'latest_slug'      => 'Latest Post Slug',
 		'latest_link_html' => 'Latest Post Link (clickable)',
 		'latest_button'    => 'Latest Post Button',
 		'latest_image'     => 'Latest Post Featured Image',
@@ -63,6 +72,21 @@ add_action( 'fluent_crm/after_init', function () {
 			$category  = $m[2];
 		}
 
+		// Button options: _text_Listen-Now _bg_8B4513 _color_ffffff
+		$button = array();
+		if ( preg_match( '/_text_([^_]+)/', $value_key, $m ) ) {
+			$button['text'] = str_replace( '-', ' ', $m[1] );
+			$value_key      = str_replace( $m[0], '', $value_key );
+		}
+		if ( preg_match( '/_bg_([a-fA-F0-9]{3,6})/', $value_key, $m ) ) {
+			$button['bg'] = '#' . $m[1];
+			$value_key    = str_replace( $m[0], '', $value_key );
+		}
+		if ( preg_match( '/_color_([a-fA-F0-9]{3,6})/', $value_key, $m ) ) {
+			$button['color'] = '#' . $m[1];
+			$value_key       = str_replace( $m[0], '', $value_key );
+		}
+
 		switch ( $value_key ) {
 			case 'list':
 				return upfluent_list_html( 5, $category );
@@ -72,11 +96,14 @@ add_action( 'fluent_crm/after_init', function () {
 				return upfluent_list_html( 10, $category );
 			case 'latest_title':
 			case 'latest_excerpt':
+			case 'latest_url':
 			case 'latest_link':
+			case 'latest_slug':
 			case 'latest_link_html':
-			case 'latest_button':
 			case 'latest_image':
 				return upfluent_latest_field( substr( $value_key, 7 ), $category );
+			case 'latest_button':
+				return upfluent_latest_button( $category, $button );
 			case 'latest_full':
 				return upfluent_latest_card( $category );
 			case 'latest_body':
@@ -91,7 +118,7 @@ add_action( 'fluent_crm/after_init', function () {
  * ---------------------------------------------------------------------- */
 
 /**
- * Fetch posts. $context lets filters target one output (list, latest, card, body).
+ * Fetch posts. $context lets filters target one output (list, latest, button, card, body).
  */
 function upfluent_get_posts( $count = 5, $category = '', $context = 'list', $post_type = 'post' ) {
 	$args = array(
@@ -184,18 +211,56 @@ function upfluent_latest_field( $field, $category = '' ) {
 			return esc_html( $title );
 		case 'excerpt':
 			return upfluent_excerpt( $post, 30 );
+		case 'url':
+			return esc_url( $url );
 		case 'link':
+			// Some FluentCRM link fields prepend http:// themselves; this avoids a doubled protocol.
 			return preg_replace( '#^https?://#', '', $url );
+		case 'slug':
+			return $post->post_name;
 		case 'link_html':
 			return '<a href="' . esc_url( $url ) . '" style="color:#0073aa;text-decoration:underline;">' . esc_html( $title ) . '</a>';
 		case 'button':
-			$label = apply_filters( 'upfluent_button_label', 'Read Latest Post' );
-			return '<a href="' . esc_url( $url ) . '" style="display:inline-block;background-color:#0073aa;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:4px;font-size:16px;font-weight:600;">' . esc_html( $label ) . '</a>';
+			return upfluent_latest_button( $category );
 		case 'image':
 			$img = get_the_post_thumbnail_url( $post, 'medium' );
 			return $img ? '<img src="' . esc_url( $img ) . '" alt="' . esc_attr( $title ) . '" style="max-width:100%;height:auto;border-radius:4px;display:block;" />' : '';
 	}
 	return '';
+}
+
+/**
+ * Styled button linking to the latest post. $opts: text, bg, color, padding, radius, font_size, font_weight.
+ */
+function upfluent_latest_button( $category = '', $opts = array(), $post_type = 'post' ) {
+	$opts = wp_parse_args( array_filter( $opts ), apply_filters( 'upfluent_button_defaults', array(
+		'text'        => 'Read Latest Post',
+		'bg'          => '#0073aa',
+		'color'       => '#ffffff',
+		'padding'     => '12px 24px',
+		'radius'      => '4px',
+		'font_size'   => '16px',
+		'font_weight' => '600',
+	) ) );
+	$opts['text'] = apply_filters( 'upfluent_button_label', $opts['text'] );
+
+	$posts = upfluent_get_posts( 1, $category, 'button', $post_type );
+	if ( empty( $posts ) ) {
+		return '';
+	}
+
+	$style = sprintf(
+		'display:inline-block;background-color:%s;color:%s;text-decoration:none;padding:%s;border-radius:%s;font-size:%s;font-weight:%s;',
+		esc_attr( $opts['bg'] ),
+		esc_attr( $opts['color'] ),
+		esc_attr( $opts['padding'] ),
+		esc_attr( $opts['radius'] ),
+		esc_attr( $opts['font_size'] ),
+		esc_attr( $opts['font_weight'] )
+	);
+
+	$html = '<a href="' . esc_url( get_permalink( $posts[0] ) ) . '" style="' . $style . '">' . esc_html( $opts['text'] ) . '</a>';
+	return apply_filters( 'upfluent_button_html', $html, $posts[0], $opts );
 }
 
 /**
@@ -272,10 +337,46 @@ add_shortcode( 'upfluent_recent_posts', function ( $atts ) {
 	);
 } );
 
-// Run the shortcode inside FluentCRM emails.
-add_filter( 'fluent_crm/parse_campaign_email_text', function ( $content ) {
-	return has_shortcode( $content, 'upfluent_recent_posts' ) ? do_shortcode( $content ) : $content;
-}, 10, 1 );
+/* -------------------------------------------------------------------------
+ * Shortcode: [upfluent_button]
+ * ---------------------------------------------------------------------- */
+add_shortcode( 'upfluent_button', function ( $atts ) {
+	$atts = shortcode_atts( array(
+		'text'        => '',
+		'bg_color'    => '',
+		'text_color'  => '',
+		'padding'     => '',
+		'radius'      => '',
+		'font_size'   => '',
+		'font_weight' => '',
+		'category'    => '',
+		'post_type'   => 'post',
+	), $atts, 'upfluent_button' );
+
+	return upfluent_latest_button(
+		$atts['category'],
+		array(
+			'text'        => $atts['text'],
+			'bg'          => $atts['bg_color'],
+			'color'       => $atts['text_color'],
+			'padding'     => $atts['padding'],
+			'radius'      => $atts['radius'],
+			'font_size'   => $atts['font_size'],
+			'font_weight' => $atts['font_weight'],
+		),
+		sanitize_key( $atts['post_type'] )
+	);
+} );
+
+// Run the shortcodes inside FluentCRM emails.
+function upfluent_do_email_shortcodes( $content ) {
+	if ( has_shortcode( $content, 'upfluent_recent_posts' ) || has_shortcode( $content, 'upfluent_button' ) ) {
+		$content = do_shortcode( $content );
+	}
+	return $content;
+}
+add_filter( 'fluent_crm/parse_campaign_email_text', 'upfluent_do_email_shortcodes', 10, 1 );
+add_filter( 'fluent_crm/email-body-text', 'upfluent_do_email_shortcodes', 10, 1 );
 
 /* -------------------------------------------------------------------------
  * Optional customizations (uncomment and edit)
@@ -303,6 +404,13 @@ add_filter( 'fluent_crm/parse_campaign_email_text', function ( $content ) {
 // Change the button text:
 // add_filter( 'upfluent_button_label', function () {
 // 	return 'Read today\'s post';
+// } );
+
+// Change the default button colors/size (brand the button once, everywhere):
+// add_filter( 'upfluent_button_defaults', function ( $d ) {
+// 	$d['bg']    = '#8B4513';
+// 	$d['color'] = '#ffffff';
+// 	return $d;
 // } );
 
 // Change the "no posts" message:

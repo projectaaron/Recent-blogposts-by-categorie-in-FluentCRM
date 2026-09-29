@@ -23,7 +23,9 @@ Open the SmartCode dropdown in the FluentCRM email editor and look for **Recent 
 | `{{recent_posts.list_10}}` | 10 latest posts |
 | `{{recent_posts.latest_title}}` | Latest post title |
 | `{{recent_posts.latest_excerpt}}` | Latest post excerpt |
-| `{{recent_posts.latest_link}}` | Latest post URL without `https://` (for FluentCRM button/image link fields) |
+| `{{recent_posts.latest_url}}` | Latest post full URL (`https://...`) |
+| `{{recent_posts.latest_link}}` | Latest post URL without `https://` (for FluentCRM link fields that add it themselves) |
+| `{{recent_posts.latest_slug}}` | Latest post slug, for building custom URLs |
 | `{{recent_posts.latest_link_html}}` | Latest post title as a clickable link |
 | `{{recent_posts.latest_button}}` | Styled "Read Latest Post" button |
 | `{{recent_posts.latest_image}}` | Latest post featured image |
@@ -42,9 +44,21 @@ Append `_category_{slug-or-id}` to any SmartCode:
 
 Underscores in the slug are converted to hyphens, so `press_releases` matches the `press-releases` category. Numeric values are treated as category IDs.
 
-## Shortcode
+### Button options
 
-For finer control (post type, hiding images, etc.) use the shortcode. It works in posts, pages, and inside FluentCRM emails.
+`latest_button` accepts inline options. Use hyphens for spaces in the label and hex colors without the `#`. Options can be combined with `_category_`.
+
+```
+{{recent_posts.latest_button_text_Listen-Now}}
+{{recent_posts.latest_button_bg_8B4513_color_ffffff}}
+{{recent_posts.latest_button_text_Read-More_bg_222222_category_news}}
+```
+
+## Shortcodes
+
+For finer control (post type, hiding images, button sizing) use the shortcodes. They work in posts, pages, and inside FluentCRM emails.
+
+### `[upfluent_recent_posts]`
 
 ```
 [upfluent_recent_posts count="5" category="news" show_image="yes" show_excerpt="yes" show_date="yes" post_type="post"]
@@ -59,18 +73,38 @@ For finer control (post type, hiding images, etc.) use the shortcode. It works i
 | `show_date` | `yes` | `yes` / `no` |
 | `post_type` | `post` | Any public post type |
 
+### `[upfluent_button]`
+
+```
+[upfluent_button text="Listen Now" bg_color="#0073aa" text_color="#ffffff" category="news"]
+```
+
+| Attribute | Default | Description |
+|-----------|---------|-------------|
+| `text` | `Read Latest Post` | Button label |
+| `bg_color` | `#0073aa` | Background color |
+| `text_color` | `#ffffff` | Text color |
+| `padding` | `12px 24px` | CSS padding |
+| `radius` | `4px` | Border radius |
+| `font_size` | `16px` | Font size |
+| `font_weight` | `600` | Font weight |
+| `category` | (all) | Category slug or ID |
+| `post_type` | `post` | Any public post type |
+
 ## Customization (filters)
 
 All filters are prefixed `upfluent_`. Ready-to-uncomment examples are at the bottom of the PHP file.
 
 | Filter | Arguments | Purpose |
 |--------|-----------|---------|
-| `upfluent_query_args` | `$args, $context` | Change the `WP_Query` args. `$context` is `list`, `latest`, `card`, or `body` so you can target one output. |
+| `upfluent_query_args` | `$args, $context` | Change the `WP_Query` args. `$context` is `list`, `latest`, `button`, `card`, or `body` so you can target one output. |
 | `upfluent_list_html` | `$html, $posts, $count` | Modify the posts list HTML |
 | `upfluent_card_html` | `$html, $post` | Modify the latest-post card HTML |
 | `upfluent_body_html` | `$html, $post` | Modify the full-content HTML |
 | `upfluent_body_styles` | `$css` | Inline CSS for the full-content wrapper |
 | `upfluent_button_label` | `$label` | Text of the `latest_button` |
+| `upfluent_button_defaults` | `$defaults` | Default button text, colors, padding, radius, font size/weight |
+| `upfluent_button_html` | `$html, $post, $opts` | Modify the button HTML |
 | `upfluent_empty_html` | `$html` | Output when no posts are found |
 
 Example: always pull `latest_body` from one category.
