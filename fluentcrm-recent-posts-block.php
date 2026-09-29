@@ -1,14 +1,17 @@
 <?php
 /**
  * Plugin Name: Recent Posts SmartCodes for FluentCRM
- * Plugin URI:  https://github.com/projectaaron/Recent-blogposts-by-categorie-in-FluentCRM
+ * Plugin URI:  https://upfluent.io/fluentcrm-recent-posts/
  * Description: Adds a "Recent Posts" SmartCode group to FluentCRM so you can insert your latest blog posts, filtered by category, into any email.
  * Version:     2.0.0
- * Author:      projectaaron
+ * Author:      UpFluent
+ * Author URI:  https://upfluent.io/
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain: recent-posts-smartcodes-for-fluentcrm
  * Requires at least: 5.0
  * Requires PHP: 7.4
+ * Update URI:  https://upfluent.io/fluentcrm-recent-posts/
  *
  * Adds a "Recent Posts" group to FluentCRM's smart codes so you can drop your
  * latest blog posts (or the full latest post) into any email.
@@ -154,6 +157,7 @@ function upfluent_get_posts( $count = 5, $category = '', $context = 'list', $pos
 
 function upfluent_excerpt( $post, $words ) {
 	$text = $post->post_excerpt ? $post->post_excerpt : strip_shortcodes( $post->post_content );
+	$text = preg_replace( '/<[^>]+>/', ' ', $text ); // keep a space where a tag was, so headings don't run into paragraphs
 	return esc_html( wp_trim_words( $text, $words, '…' ) );
 }
 
