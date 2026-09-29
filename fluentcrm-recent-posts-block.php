@@ -1,6 +1,14 @@
 <?php
 /**
- * Recent Posts SmartCodes for FluentCRM
+ * Plugin Name: Recent Posts SmartCodes for FluentCRM
+ * Plugin URI:  https://github.com/projectaaron/Recent-blogposts-by-categorie-in-FluentCRM
+ * Description: Adds a "Recent Posts" SmartCode group to FluentCRM so you can insert your latest blog posts, filtered by category, into any email.
+ * Version:     2.0.0
+ * Author:      projectaaron
+ * License:     GPL-2.0-or-later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Requires at least: 5.0
+ * Requires PHP: 7.4
  *
  * Adds a "Recent Posts" group to FluentCRM's smart codes so you can drop your
  * latest blog posts (or the full latest post) into any email.
