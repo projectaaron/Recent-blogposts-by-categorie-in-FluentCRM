@@ -100,14 +100,16 @@ $a = strpos( $c, '<!-- wp:navigation' );
 if ( false === $a ) {
 	WP_CLI::error( 'No navigation block in header.html' );
 }
-$self = strpos( $c, '/-->', $a );
-$end  = strpos( $c, '<!-- /wp:navigation -->', $a );
-$is_self_closing = false !== $self && ( false === $end || $self < $end );
-$b = $is_self_closing ? $self + 4 : $end + strlen( '<!-- /wp:navigation -->' );
+// The block's opening comment, and its end: the closing tag if there is one
+// (inline links), otherwise the end of a self-closing opening comment.
+$open_end = strpos( $c, '-->', $a ) + 3;
+$opening  = substr( $c, $a, $open_end - $a );
+$close    = strpos( $c, '<!-- /wp:navigation -->', $a );
+$b        = false !== $close ? $close + strlen( '<!-- /wp:navigation -->' ) : $open_end;
 $old_block = substr( $c, $a, $b - $a );
 
 // Keep the block's own settings (overlay, layout, spacing), just add the ref and drop inline links.
-preg_match( '/^<!-- wp:navigation (\{.*?\}) (\/)?-->/s', $old_block, $m );
+preg_match( '/^<!-- wp:navigation (\{.*\}) \/?-->$/s', $opening, $m );
 $attrs = ! empty( $m[1] ) ? json_decode( $m[1], true ) : array();
 if ( ! is_array( $attrs ) ) {
 	$attrs = array();
