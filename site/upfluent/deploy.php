@@ -161,22 +161,19 @@ $out[] = 'add-ons index: ' . upf_rp_add_index_row( get_page_by_path( 'add-ons', 
 $front = (int) get_option( 'page_on_front' );
 $out[] = 'home: ' . ( $front ? upf_rp_add_index_row( get_post( $front ), $slug ) : 'no static front page' );
 
-/* ---- 4b. Navigation: turn the "Add-ons" item into a submenu of available add-ons ---- */
-$navs   = get_posts( array( 'post_type' => 'wp_navigation', 'numberposts' => -1, 'post_status' => 'publish' ) );
-$navmsg = 'no navigation with an Add-ons link';
-foreach ( $navs as $nav ) {
-	$c = $nav->post_content;
+/* ---- 4b. Navigation: turn the "Add-ons" item into a submenu of available add-ons ----
+ * The menu lives in the theme's parts/header.html (inline navigation-link blocks),
+ * with a fallback for a saved wp_navigation post. A dated backup of the file is kept. */
+function upf_rp_nav_submenu( $c, $slug ) {
 	if ( false !== strpos( $c, "/$slug/" ) ) {
-		$navmsg = 'already linked';
-		break;
+		return array( $c, 'already linked' );
 	}
 	if ( ! preg_match( '/<!-- wp:navigation-link (\{[^\n]*?"url":"\/add-ons\/"[^\n]*?\}) \/-->/', $c, $m ) ) {
-		continue;
+		return array( $c, 'no Add-ons link' );
 	}
 	$attrs = json_decode( $m[1], true );
 	if ( ! is_array( $attrs ) ) {
-		$navmsg = 'SKIPPED (could not parse Add-ons link)';
-		break;
+		return array( $c, 'SKIPPED (could not parse Add-ons link)' );
 	}
 	$children = array(
 		array( 'Meta Fields for FluentCart', '/fluentcart-custom-meta-fields/' ),
@@ -184,17 +181,33 @@ foreach ( $navs as $nav ) {
 		array( 'Recent Posts SmartCodes for FluentCRM', "/$slug/" ),
 		array( 'All add-ons', '/add-ons/' ),
 	);
-	$inner = '';
+	$inner = "\n";
 	foreach ( $children as $ch ) {
-		$inner .= '<!-- wp:navigation-link ' . wp_json_encode( array( 'label' => $ch[0], 'url' => $ch[1], 'kind' => 'custom', 'isTopLevelLink' => false ), JSON_UNESCAPED_SLASHES ) . ' /-->';
+		$inner .= '<!-- wp:navigation-link ' . wp_json_encode( array( 'label' => $ch[0], 'url' => $ch[1], 'kind' => 'custom', 'isTopLevelLink' => false ), JSON_UNESCAPED_SLASHES ) . " /-->\n";
 	}
 	$submenu = '<!-- wp:navigation-submenu ' . wp_json_encode( $attrs, JSON_UNESCAPED_SLASHES ) . ' -->' . $inner . '<!-- /wp:navigation-submenu -->';
-	$c       = str_replace( $m[0], $submenu, $c );
-	wp_update_post( array( 'ID' => $nav->ID, 'post_content' => $c ) );
-	$navmsg = 'Add-ons submenu added (nav #' . $nav->ID . ')';
-	break;
+	return array( str_replace( $m[0], $submenu, $c ), 'Add-ons submenu added' );
 }
-$out[] = 'nav: ' . $navmsg;
+$navmsg = array();
+$header = get_stylesheet_directory() . '/parts/header.html';
+if ( file_exists( $header ) ) {
+	list( $new, $msg ) = upf_rp_nav_submenu( file_get_contents( $header ), $slug );
+	if ( 'Add-ons submenu added' === $msg ) {
+		copy( $header, $header . '.bak-' . gmdate( 'Ymd-His' ) );
+		file_put_contents( $header, $new );
+	}
+	$navmsg[] = 'theme header: ' . $msg;
+}
+foreach ( get_posts( array( 'post_type' => 'wp_navigation', 'numberposts' => -1, 'post_status' => 'publish' ) ) as $nav ) {
+	list( $new, $msg ) = upf_rp_nav_submenu( $nav->post_content, $slug );
+	if ( 'Add-ons submenu added' === $msg ) {
+		wp_update_post( array( 'ID' => $nav->ID, 'post_content' => $new ) );
+	}
+	if ( 'no Add-ons link' !== $msg ) {
+		$navmsg[] = 'wp_navigation #' . $nav->ID . ': ' . $msg;
+	}
+}
+$out[] = 'nav: ' . ( $navmsg ? implode( ', ', $navmsg ) : 'nothing found to edit' );
 
 /* ---- 5. Changelog (page 40): add a line to the first list ---- */
 $log = get_page_by_path( 'changelog', OBJECT, 'page' );
