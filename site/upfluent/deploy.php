@@ -121,44 +121,80 @@ update_post_meta( $page_id, 'rank_math_facebook_image', $tokens['{{IMG_LIST_URL}
 update_post_meta( $page_id, 'rank_math_twitter_use_facebook', 'on' );
 $out[] = 'page: #' . $page_id . ' ' . get_permalink( $page_id );
 
-/* ---- 4. Add-ons index (page 38): insert a row after All-In-One MCP ---- */
-$index = get_page_by_path( 'add-ons', OBJECT, 'page' );
-if ( $index && false === strpos( $index->post_content, "/$slug/" ) ) {
-	$c = $index->post_content;
+/* ---- 4. Add-ons index and home page: insert a row after All-In-One MCP ---- */
+function upf_rp_add_index_row( $post, $slug ) {
+	if ( ! $post ) {
+		return 'page missing';
+	}
+	if ( false !== strpos( $post->post_content, "/$slug/" ) ) {
+		return 'already listed';
+	}
+	$c = $post->post_content;
 	preg_match_all( '/<!-- wp:group \{[^\n]*?uf-index-row/', $c, $mm, PREG_OFFSET_CAPTURE );
 	$starts = array_column( $mm[0], 1 );
-	if ( count( $starts ) >= 3 ) {
-		$row2 = substr( $c, $starts[1], $starts[2] - $starts[1] );
-		$new  = $row2;
-		$reps = array(
-			'>02<' => '>03<',
-			'<a href="/all-in-one-mcp-for-fluent-suite/">All-In-One MCP for Fluent Suite</a>' => '<a href="/' . $slug . '/">Recent Posts SmartCodes</a>',
-			'>Fluent suite<' => '>FluentCRM<',
-			'Your AI assistant runs the Fluent suite.' => 'Free · Your latest blog posts in any email, by category.',
-		);
-		$ok = true;
-		foreach ( $reps as $from => $to ) {
-			$n   = substr_count( $new, $from );
-			$ok  = $ok && 1 === $n;
-			$new = str_replace( $from, $to, $new );
-		}
-		if ( $ok ) {
-			$tail = substr( $c, $starts[2] );
-			$tail = str_replace( '>04<', '>05<', $tail );
-			$tail = str_replace( '>03<', '>04<', $tail );
-			$c    = substr( $c, 0, $starts[2] ) . $new . $tail;
-			$c    = str_replace( 'are available now;', 'and Recent Posts SmartCodes for FluentCRM (free) are available now;', $c );
-			wp_update_post( array( 'ID' => $index->ID, 'post_content' => $c ) );
-			$out[] = 'add-ons index: row added';
-		} else {
-			$out[] = 'add-ons index: SKIPPED (row anchors not found, edit by hand)';
-		}
-	} else {
-		$out[] = 'add-ons index: SKIPPED (rows not found, edit by hand)';
+	if ( count( $starts ) < 3 ) {
+		return 'SKIPPED (rows not found, edit by hand)';
 	}
-} else {
-	$out[] = 'add-ons index: already listed';
+	$row2 = substr( $c, $starts[1], $starts[2] - $starts[1] );
+	$new  = $row2;
+	$reps = array(
+		'>02<' => '>03<',
+		'<a href="/all-in-one-mcp-for-fluent-suite/">All-In-One MCP for Fluent Suite</a>' => '<a href="/' . $slug . '/">Recent Posts SmartCodes</a>',
+		'>Fluent suite<' => '>FluentCRM<',
+		'Your AI assistant runs the Fluent suite.' => 'Free · Your latest blog posts in any email, by category.',
+	);
+	foreach ( $reps as $from => $to ) {
+		if ( 1 !== substr_count( $new, $from ) ) {
+			return 'SKIPPED (row anchors not found, edit by hand)';
+		}
+		$new = str_replace( $from, $to, $new );
+	}
+	$tail = substr( $c, $starts[2] );
+	$tail = str_replace( '>04<', '>05<', $tail );
+	$tail = str_replace( '>03<', '>04<', $tail );
+	$c    = substr( $c, 0, $starts[2] ) . $new . $tail;
+	$c    = str_replace( 'are available now;', 'and Recent Posts SmartCodes for FluentCRM (free) are available now;', $c );
+	wp_update_post( array( 'ID' => $post->ID, 'post_content' => $c ) );
+	return 'row added';
 }
+$out[] = 'add-ons index: ' . upf_rp_add_index_row( get_page_by_path( 'add-ons', OBJECT, 'page' ), $slug );
+$front = (int) get_option( 'page_on_front' );
+$out[] = 'home: ' . ( $front ? upf_rp_add_index_row( get_post( $front ), $slug ) : 'no static front page' );
+
+/* ---- 4b. Navigation: turn the "Add-ons" item into a submenu of available add-ons ---- */
+$navs   = get_posts( array( 'post_type' => 'wp_navigation', 'numberposts' => -1, 'post_status' => 'publish' ) );
+$navmsg = 'no navigation with an Add-ons link';
+foreach ( $navs as $nav ) {
+	$c = $nav->post_content;
+	if ( false !== strpos( $c, "/$slug/" ) ) {
+		$navmsg = 'already linked';
+		break;
+	}
+	if ( ! preg_match( '/<!-- wp:navigation-link (\{[^\n]*?"url":"\/add-ons\/"[^\n]*?\}) \/-->/', $c, $m ) ) {
+		continue;
+	}
+	$attrs = json_decode( $m[1], true );
+	if ( ! is_array( $attrs ) ) {
+		$navmsg = 'SKIPPED (could not parse Add-ons link)';
+		break;
+	}
+	$children = array(
+		array( 'Meta Fields for FluentCart', '/fluentcart-custom-meta-fields/' ),
+		array( 'All-In-One MCP for Fluent Suite', '/all-in-one-mcp-for-fluent-suite/' ),
+		array( 'Recent Posts SmartCodes for FluentCRM', "/$slug/" ),
+		array( 'All add-ons', '/add-ons/' ),
+	);
+	$inner = '';
+	foreach ( $children as $ch ) {
+		$inner .= '<!-- wp:navigation-link ' . wp_json_encode( array( 'label' => $ch[0], 'url' => $ch[1], 'kind' => 'custom', 'isTopLevelLink' => false ), JSON_UNESCAPED_SLASHES ) . ' /-->';
+	}
+	$submenu = '<!-- wp:navigation-submenu ' . wp_json_encode( $attrs, JSON_UNESCAPED_SLASHES ) . ' -->' . $inner . '<!-- /wp:navigation-submenu -->';
+	$c       = str_replace( $m[0], $submenu, $c );
+	wp_update_post( array( 'ID' => $nav->ID, 'post_content' => $c ) );
+	$navmsg = 'Add-ons submenu added (nav #' . $nav->ID . ')';
+	break;
+}
+$out[] = 'nav: ' . $navmsg;
 
 /* ---- 5. Changelog (page 40): add a line to the first list ---- */
 $log = get_page_by_path( 'changelog', OBJECT, 'page' );
