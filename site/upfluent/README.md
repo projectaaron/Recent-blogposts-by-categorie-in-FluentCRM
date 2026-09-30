@@ -6,6 +6,7 @@ Files used to publish this plugin as a free add-on on [upfluent.io](https://upfl
 | --- | --- |
 | `page-fluentcrm-recent-posts.html` | Block markup for the product page (`page-product` template). Tokens `{{ZIP_URL}}`, `{{VERSION}}`, `{{IMG_*_ID}}`, `{{IMG_*_URL}}` are filled by the deploy script. |
 | `deploy.php` | WP-CLI script. Copies the zip into uploads, imports the screenshots, creates or updates the page, sets Rank Math meta, adds the add-on to the Add-ons index, Changelog and Docs pages. Idempotent. |
+| `menu.php` | WP-CLI script. Builds the header menu the block-theme way: a saved Navigation post ("Main Menu", editable under Appearance → Editor → Navigation) with page links and an Add-ons submenu, and points the theme's `parts/header.html` at it with `{"ref":ID}`. Idempotent; backs up header.html. |
 | `images/` | Real plugin output rendered with sample posts, used as screenshots. |
 
 ## Release a new version
